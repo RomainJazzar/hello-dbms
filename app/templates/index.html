@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Carbon Footprint Calculator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <h1>🌍 Calculateur d’Empreinte Carbone</h1>
+      <p class="sub">Mix électrique (2015) + facteurs d’émissions (médianes IPCC 2014).</p>
+    </header>
+
+    <section class="card">
+      <form method="post" class="form">
+        <div class="row">
+          <label for="mode">Mode</label>
+          <select id="mode" name="mode">
+            <option value="Country" {% if mode=='Country' %}selected{% endif %}>Pays</option>
+            <option value="World" {% if mode=='World' %}selected{% endif %}>Région/Continent</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label for="selected">Sélection</label>
+          <select id="selected" name="selected" required>
+            {% for c in choices %}
+              <option value="{{ c }}" {% if selected==c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="row">
+          <label for="kw">Puissance consommée (kW) en continu</label>
+          <input id="kw" name="kw" type="number" step="0.01" value="{{ kw }}" required />
+          <small>Exemple de l’énoncé : 1 kW</small>
+        </div>
+
+        <button class="btn" type="submit">Calculer</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Aperçu du dataset ({{ "World" if mode=="World" else "Country" }})</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {% if preview and preview[0] %}
+                {% for k in preview[0].keys() %}
+                  <th>{{ k }}</th>
+                {% endfor %}
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in preview %}
+              <tr>
+                {% for v in r.values() %}
+                  <td>{{ v }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% if result %}
+    <section class="card">
+      <h2>Résultats — {{ result.mode }}: {{ result.selected }}</h2>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpi-label">Intensité carbone</div>
+          <div class="kpi-value">{{ "%.2f"|format(result.intensity_g_per_kwh) }} gCO₂/kWh</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Émissions annuelles</div>
+          <div class="kpi-value">{{ "%.2f"|format(result.annual_kg) }} kg CO₂/an</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Arbres pour compenser</div>
+          <div class="kpi-value">{{ "%.1f"|format(result.trees) }}</div>
+        </div>
+      </div>
+
+      <h3>Détail par source</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>% d’utilisation</th>
+              <th>Médiane (gCO₂/kWh)</th>
+              <th>Contribution (gCO₂/kWh)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in result.table %}
+              <tr>
+                <td>{{ row.source }}</td>
+                <td>{{ "%.2f"|format(row.pct) }}%</td>
+                <td>{{ row.median }}</td>
+                <td>{{ "%.2f"|format(row.contrib) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <p class="note">
+        contribution = (%/100) × facteur. Total = somme des contributions.  
+        Annuel = (kgCO₂/kWh) × (kW × 24 × 365). Arbres = kg/an ÷ 25.
+      </p>
+    </section>
+    {% endif %}
+
+    <footer class="footer">
+      <p>
+        La table <code>World</code> est dérivée (moyenne du mix des pays regroupés par continent via <code>hello_dbms.world</code>).
+      </p>
+    </footer>
+  </main>
+</body>
+</html>
