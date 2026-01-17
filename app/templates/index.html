@@ -1,11 +1,13 @@
 <!doctype html>
 <html lang="fr">
+
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Carbon Footprint Calculator</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Calculateur d’Empreinte Carbone</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
+
 <body>
   <main class="container">
     <header class="header">
@@ -13,74 +15,129 @@
       <p class="sub">Mix électrique (2015) + facteurs d’émissions (médianes IPCC 2014).</p>
     </header>
 
+    {# Optional info messages from backend #}
+    {% if db_error %}
+    <section class="alert alert-error">
+      <strong>Base de données indisponible</strong><br />
+      <span>{{ db_error }}</span>
+      <div class="small">
+        Vérifie que MySQL tourne, que la DB <code>carbonfootprint</code> existe, et lance
+        <code>python scripts/init_mysql.py</code>.
+      </div>
+    </section>
+    {% endif %}
+
+    {% if choice_note %}
+    <section class="alert alert-info">
+      <strong>Info :</strong> {{ choice_note }}
+    </section>
+    {% endif %}
+    {% if preview_note %}
+    <section class="alert alert-info">
+      <strong>Info :</strong> {{ preview_note }}
+    </section>
+    {% endif %}
+
     <section class="card">
       <form method="post" class="form">
         <div class="row">
           <label for="mode">Mode</label>
-          <select id="mode" name="mode">
+
+          <!-- ✅ Auto-refresh list when mode changes -->
+          <select id="mode" name="mode" onchange="this.form.submit()">
             <option value="Country" {% if mode=='Country' %}selected{% endif %}>Pays</option>
-            <option value="World" {% if mode=='World' %}selected{% endif %}>Région/Continent</option>
+            <option value="World" {% if mode=='World' %}selected{% endif %}>Région / Continent</option>
           </select>
+
+          <small class="hint">
+            Change de mode pour charger la liste (pays ou régions).
+          </small>
         </div>
 
         <div class="row">
           <label for="selected">Sélection</label>
+
+          {% if choices and choices|length > 0 %}
           <select id="selected" name="selected" required>
             {% for c in choices %}
-              <option value="{{ c }}" {% if selected==c %}selected{% endif %}>{{ c }}</option>
+            <option value="{{ c }}" {% if selected==c %}selected{% endif %}>{{ c }}</option>
             {% endfor %}
           </select>
+          {% else %}
+          <div class="empty">
+            Aucune donnée disponible pour ce mode.
+            <div class="small">
+              Lance <code>python scripts/init_mysql.py</code> ou vérifie ta DB <code>carbonfootprint</code>.
+            </div>
+          </div>
+          {% endif %}
         </div>
 
         <div class="row">
           <label for="kw">Puissance consommée (kW) en continu</label>
-          <input id="kw" name="kw" type="number" step="0.01" value="{{ kw }}" required />
-          <small>Exemple de l’énoncé : 1 kW</small>
+          <input id="kw" name="kw" type="number" step="0.01" min="0.01" value="{{ kw or 1 }}" required />
+          <small class="hint">Exemple de l’énoncé : 1 kW</small>
         </div>
 
-        <button class="btn" type="submit">Calculer</button>
+        <button class="btn" type="submit" {% if not choices or choices|length==0 %}disabled{% endif %}>
+          Calculer
+        </button>
       </form>
     </section>
 
     <section class="card">
-      <h2>Aperçu du dataset ({{ "World" if mode=="World" else "Country" }})</h2>
+      <div class="card-head">
+        <h2>Aperçu du dataset ({{ "World" if mode=="World" else "Country" }})</h2>
+        <span class="pill">{{ preview|length }} lignes</span>
+      </div>
+
+      {% if preview and preview|length > 0 %}
       <div class="table-wrap">
-        <table>
+        <table class="table">
           <thead>
             <tr>
-              {% if preview and preview[0] %}
-                {% for k in preview[0].keys() %}
-                  <th>{{ k }}</th>
-                {% endfor %}
-              {% endif %}
+              {% for k in preview[0].keys() %}
+              <th>{{ k }}</th>
+              {% endfor %}
             </tr>
           </thead>
           <tbody>
             {% for r in preview %}
-              <tr>
-                {% for v in r.values() %}
-                  <td>{{ v }}</td>
-                {% endfor %}
-              </tr>
+            <tr>
+              {% for v in r.values() %}
+              <td>{{ v }}</td>
+              {% endfor %}
+            </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+      {% else %}
+      <div class="empty">
+        Aperçu indisponible : aucune ligne retournée.
+        <div class="small">
+          Vérifie que les tables <code>Country</code> / <code>World</code> contiennent des données
+          (<code>SELECT COUNT(*)</code>).
+        </div>
+      </div>
+      {% endif %}
     </section>
 
     {% if result %}
     <section class="card">
-      <h2>Résultats — {{ result.mode }}: {{ result.selected }}</h2>
+      <h2>Résultats — {{ result.mode }} : {{ result.selected }}</h2>
 
       <div class="kpis">
         <div class="kpi">
           <div class="kpi-label">Intensité carbone</div>
           <div class="kpi-value">{{ "%.2f"|format(result.intensity_g_per_kwh) }} gCO₂/kWh</div>
         </div>
+
         <div class="kpi">
           <div class="kpi-label">Émissions annuelles</div>
           <div class="kpi-value">{{ "%.2f"|format(result.annual_kg) }} kg CO₂/an</div>
         </div>
+
         <div class="kpi">
           <div class="kpi-label">Arbres pour compenser</div>
           <div class="kpi-value">{{ "%.1f"|format(result.trees) }}</div>
@@ -88,8 +145,10 @@
       </div>
 
       <h3>Détail par source</h3>
+
+      {% if result.table and result.table|length > 0 %}
       <div class="table-wrap">
-        <table>
+        <table class="table">
           <thead>
             <tr>
               <th>Source</th>
@@ -100,19 +159,22 @@
           </thead>
           <tbody>
             {% for row in result.table %}
-              <tr>
-                <td>{{ row.source }}</td>
-                <td>{{ "%.2f"|format(row.pct) }}%</td>
-                <td>{{ row.median }}</td>
-                <td>{{ "%.2f"|format(row.contrib) }}</td>
-              </tr>
+            <tr>
+              <td>{{ row.source }}</td>
+              <td>{{ "%.2f"|format(row.pct) }}%</td>
+              <td>{{ row.median }}</td>
+              <td>{{ "%.2f"|format(row.contrib) }}</td>
+            </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+      {% else %}
+      <div class="empty">Aucun détail disponible pour cette sélection.</div>
+      {% endif %}
 
       <p class="note">
-        contribution = (%/100) × facteur. Total = somme des contributions.  
+        contribution = (%/100) × facteur. Total = somme des contributions.<br />
         Annuel = (kgCO₂/kWh) × (kW × 24 × 365). Arbres = kg/an ÷ 25.
       </p>
     </section>
@@ -120,9 +182,11 @@
 
     <footer class="footer">
       <p>
-        La table <code>World</code> est dérivée (moyenne du mix des pays regroupés par continent via <code>hello_dbms.world</code>).
+        La table <code>World</code> est dérivée (moyenne du mix des pays regroupés par continent via
+        <code>hello_dbms.world</code>).
       </p>
     </footer>
   </main>
 </body>
+
 </html>
